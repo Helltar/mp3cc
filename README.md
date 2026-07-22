@@ -47,19 +47,55 @@ emulator, which cannot exec standalone ARM binaries.
 ## Usage
 
 ```sh
-mp3CC -s"<source>" -o"<output_dir>" -l"<global_lib_dir>" -p"<project_lib_dir>" \
-      -c<canvas_type> -m<math_type> [-r<next_record_id>] [-d]
+mp3CC \
+  -s"<source>" \
+  -o"<output_dir>" \
+  -l"<global_lib_dir>" \
+  -p"<project_lib_dir>" \
+  -c<canvas_type> \
+  -m<math_type> \
+  [-r<next_record_id>] \
+  [-d]
 ```
 
-`-c0` plain canvas, `-c1` full screen, `-c2` full Nokia. `-m0` integer only,
-`-m2` real number support. `-d` only detects units without compiling. Both `-l`
-and `-p` are required even when the directories are empty.
+Required options:
+
+| Option | Description |
+| --- | --- |
+| `-s<source>` | MIDletPascal source file (`.pas` or `.mpsrc`) |
+| `-o<output_dir>` | Directory for generated `.class` and `.bsf` files |
+| `-l<global_lib_dir>` | Global library directory |
+| `-p<project_lib_dir>` | Project library directory |
+| `-c<canvas_type>` | Canvas mode: `0` plain, `1` full-screen MIDP 2.0, or `2` full-screen Nokia |
+| `-m<math_type>` | Number support: `0` integers only or `2` real numbers |
+
+Optional options:
+
+| Option | Description |
+| --- | --- |
+| `-r<next_record_id>` | Initial ID for record types |
+| `-d` | Detect required units without compiling |
+
+Both library options are required even when their directories are empty. For
+example, compile the single-file `Cubes` project with:
+
+```sh
+mkdir -p /tmp/mp3cc-out /tmp/emptylibs
+./Release/mp3CC \
+  -s"testdata/Cubes/src/cubes.pas" \
+  -o"/tmp/mp3cc-out" \
+  -l"/tmp/emptylibs" \
+  -p"/tmp/emptylibs" \
+  -c0 \
+  -m2
+```
 
 Units must be compiled before the program that uses them, into the same output
 directory — the compiler resolves `uses` through the `.bsf` symbol files left
 there by earlier runs.
 
-`testdata/` holds MIDletPascal projects to compile when testing a build.
+`testdata/` holds more MIDletPascal projects for testing a build; see
+[`testdata/README.md`](testdata/README.md) for their dependency order.
 
 ## Licence
 
