@@ -1,4 +1,7 @@
+.idea/
+
 Release/
 Debug/
 Release-*/
+
 *.o
