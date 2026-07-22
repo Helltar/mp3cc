@@ -37,6 +37,9 @@ MAINS=main
 CLASSGENS=constant_pool classgen bytecode preverify
 LEXS=lex.yy
 UTILS=error memory strings
+ifeq ($(ANDROID),1)
+	UTILS += android_tls
+endif
 PARSERS=parser stdpas
 STRUCTURES=block identifier type type_list name_table string_list unit
 PREVERS=file convert_md classresolver stubs classloader util \
@@ -78,21 +81,25 @@ CLANG_LEGACY = -std=gnu89 -fcommon -w -Wno-int-conversion \
 android: android-arm64 android-armv7 android-x86_64
 
 android-arm64:
-	$(MAKE) CC=$(NDK_BIN)/aarch64-linux-android21-clang STATIC=1 \
+	$(MAKE) CC=$(NDK_BIN)/aarch64-linux-android21-clang STATIC=1 ANDROID=1 \
 	   DESTDIR=Release-android-arm64 LEGACY="$(CLANG_LEGACY)"
 
 android-armv7:
-	$(MAKE) CC=$(NDK_BIN)/armv7a-linux-androideabi21-clang STATIC=1 \
+	$(MAKE) CC=$(NDK_BIN)/armv7a-linux-androideabi21-clang STATIC=1 ANDROID=1 \
 	   DESTDIR=Release-android-armv7 LEGACY="$(CLANG_LEGACY)"
 
 android-x86_64:
-	$(MAKE) CC=$(NDK_BIN)/x86_64-linux-android21-clang STATIC=1 \
+	$(MAKE) CC=$(NDK_BIN)/x86_64-linux-android21-clang STATIC=1 ANDROID=1 \
 	   DESTDIR=Release-android-x86_64 LEGACY="$(CLANG_LEGACY)"
 
 release: $(DIRS) $(DESTDIR)/mp3CC
 
 $(DIRS):
 	mkdir -p $@
+
+# Clang otherwise emits emulated TLS, which cannot raise PT_TLS alignment
+$(DESTDIR)/util/android_tls.o: util/android_tls.c | $(DIRS)
+	$(CPPC) -fno-emulated-tls -c -o $@ $<
 
 $(DESTDIR)/%.o : %.c | $(DIRS)
 	$(CPPC) -c -o $@ $<
