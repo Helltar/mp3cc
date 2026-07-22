@@ -6,6 +6,8 @@
 
 ********************************************************************/
 
+#include <stddef.h> /* size_t; bionic does not pull it in transitively */
+
 struct memory_object_struct
 {
 	struct memory_object_struct *next;

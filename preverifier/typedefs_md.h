@@ -42,12 +42,7 @@ typedef long int32_t;
 #endif /* SOLARIS2 */
 
 #ifdef LINUX
-#ifndef       _UINT64_T
-#define       _UINT64_T
-typedef unsigned long long uint64_t;
-#define _UINT32_T
-typedef unsigned long uint32_t;
-#endif
+#include <stdint.h> /* uint64_t/uint32_t; hand-rolled typedefs clash with bionic */
 #endif /* LINUX */
 
 #ifdef WIN32

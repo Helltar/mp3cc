@@ -1,7 +1,7 @@
 # mp3cc
 
-MIDletPascal 3.5 compiler, ported to build and run on modern Linux (x86_64) and
-ARM64.
+MIDletPascal 3.5 compiler, ported to build and run on modern Linux (x86_64),
+ARM64 and Android.
 
 The compiler takes MIDletPascal source (`.pas` / `.mpsrc`) and emits preverified
 CLDC-1.0 Java class files for J2ME. This is the compiler only — no IDE.
@@ -17,6 +17,7 @@ taken at r15. Original code by Niksa Orlic (1.x–2.0) and Artem (3.0).
 ```sh
 make            # native            -> Release/mp3CC
 make arm64      # static aarch64    -> Release-arm64/mp3CC
+make android    # static bionic     -> Release-android-{arm64,armv7,x86_64}/mp3CC
 make ISDEBUG=1  # symbols, -O0      -> Debug/mp3CC
 ```
 
@@ -30,7 +31,18 @@ sudo pacman -S aarch64-linux-gnu-gcc     # plus this for: make arm64
 ```
 
 The arm64 binary is linked static on purpose, so the same file runs both on ARM
-Linux and on Android under `arm64-v8a`, where there is no glibc to link against.
+Linux and on ARM Android when started from a shell.
+
+### Android
+
+Binaries that an Android *application* spawns must come from
+`make android`, which links static against bionic using the NDK
+(`NDK=<path> make android`, default `~/Android/android-ndk-r27c`, API 21).
+A glibc-static binary starts fine from `adb shell`, but modern glibc uses
+syscalls outside the app seccomp allowlist, so the same file spawned from an app
+process is killed instantly — no output, no crash log, just a zombie. The
+x86_64 target exists so the compiler also works inside the Android Studio
+emulator, which cannot exec standalone ARM binaries.
 
 ## Usage
 

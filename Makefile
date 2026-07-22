@@ -56,13 +56,38 @@ all: release
 re: clean all
 
 clean:
-	rm -rf Release Debug Release-arm64
+	rm -rf Release Debug Release-arm64 Release-android-*
 
 debug:
 	$(MAKE) ISDEBUG=1
 
 arm64:
 	$(MAKE) CROSS=aarch64-linux-gnu- STATIC=1 DESTDIR=Release-arm64
+
+# android builds link static against bionic via the ndk. a glibc-static binary
+# starts from adb shell but is killed by the app seccomp filter when spawned
+# from an application process, so the ndk toolchain is required here.
+# clang has no -fpermissive for c, the -Wno-* set below is its equivalent.
+NDK ?= $(HOME)/Android/android-ndk-r27c
+NDK_BIN = $(NDK)/toolchains/llvm/prebuilt/linux-x86_64/bin
+CLANG_LEGACY = -std=gnu89 -fcommon -w -Wno-int-conversion \
+   -Wno-implicit-function-declaration -Wno-implicit-int \
+   -Wno-incompatible-function-pointer-types -Wno-incompatible-pointer-types \
+   -Wno-return-type
+
+android: android-arm64 android-armv7 android-x86_64
+
+android-arm64:
+	$(MAKE) CC=$(NDK_BIN)/aarch64-linux-android21-clang STATIC=1 \
+	   DESTDIR=Release-android-arm64 LEGACY="$(CLANG_LEGACY)"
+
+android-armv7:
+	$(MAKE) CC=$(NDK_BIN)/armv7a-linux-androideabi21-clang STATIC=1 \
+	   DESTDIR=Release-android-armv7 LEGACY="$(CLANG_LEGACY)"
+
+android-x86_64:
+	$(MAKE) CC=$(NDK_BIN)/x86_64-linux-android21-clang STATIC=1 \
+	   DESTDIR=Release-android-x86_64 LEGACY="$(CLANG_LEGACY)"
 
 release: $(DIRS) $(DESTDIR)/mp3CC
 
@@ -75,4 +100,4 @@ $(DESTDIR)/%.o : %.c | $(DIRS)
 $(DESTDIR)/mp3CC: $(ITEMS:%=$(DESTDIR)/%.o)
 	$(CPPC) $(LDFLAGS) -o $@ $^ -lm
 
-.PHONY: all re clean debug release arm64
+.PHONY: all re clean debug release arm64 android android-arm64 android-armv7 android-x86_64
