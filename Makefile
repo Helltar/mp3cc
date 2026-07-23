@@ -2,6 +2,7 @@
 #
 #   make                 native build            -> Release/mp3CC
 #   make arm64           static aarch64 build    -> Release-arm64/mp3CC
+#   make android         static bionic builds    -> Release-android-*/mp3CC
 #   make ISDEBUG=1       unoptimised + symbols   -> Debug/mp3CC
 #
 # the arm64 target is built static on purpose: the same binary then runs both
@@ -70,8 +71,9 @@ arm64:
 # android builds link static against bionic via the ndk. a glibc-static binary
 # starts from adb shell but is killed by the app seccomp filter when spawned
 # from an application process, so the ndk toolchain is required here.
+# ndk r29 gives the 64-bit binaries 16 kb load-segment alignment by default.
 # clang has no -fpermissive for c, the -Wno-* set below is its equivalent.
-NDK ?= $(HOME)/Android/android-ndk-r27c
+NDK ?= $(HOME)/Android/android-ndk-r29
 NDK_BIN = $(NDK)/toolchains/llvm/prebuilt/linux-x86_64/bin
 CLANG_LEGACY = -std=gnu89 -fcommon -w -Wno-int-conversion \
    -Wno-implicit-function-declaration -Wno-implicit-int \

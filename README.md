@@ -35,10 +35,19 @@ from a shell.
 
 Binaries that an Android *application* spawns must come from
 `make android`, which links static against bionic using the NDK (`NDK=<path> make android`, default
-`~/Android/android-ndk-r27c`, API 21). A glibc-static binary starts fine from `adb shell`, but modern glibc uses
+`~/Android/android-ndk-r29`, API 21). NDK r29 aligns the 64-bit ELF `LOAD` segments for both 4 KB and 16 KB Android
+page sizes by default. A glibc-static binary starts fine from `adb shell`, but modern glibc uses
 syscalls outside the app seccomp allowlist, so the same file spawned from an app process is killed instantly — no
 output, no crash log, just a zombie. The x86_64 target exists so the compiler also works inside the Android Studio
 emulator, which cannot exec standalone ARM binaries.
+
+Make does not record the compiler path in object-file dependencies. After changing the NDK or Android compiler flags,
+force a complete Android rebuild with `make -B android`; plain `make android` can otherwise reuse objects from the old
+toolchain. An alternate NDK can still be selected explicitly:
+
+```sh
+NDK=/path/to/android-ndk make -B android
+```
 
 ## Usage
 

@@ -25,6 +25,7 @@ lines are progress percentages.
 ```sh
 make            # native            -> Release/mp3CC
 make arm64      # static aarch64    -> Release-arm64/mp3CC
+make android    # static bionic     -> Release-android-{arm64,armv7,x86_64}/mp3CC
 make ISDEBUG=1  # symbols, -O0      -> Debug/mp3CC
 make clean
 ```
@@ -32,6 +33,12 @@ make clean
 Build dependencies are in the README. Beyond those, the checks below want `javap`
 from a JDK and `qemu-user` to run the ARM binary on an x86 host. `make arm64` is linked static so one binary serves both
 ARM Linux and Android `arm64-v8a`, which has no glibc.
+
+`make android` uses Android NDK r29 from `~/Android/android-ndk-r29` by default, targets API 21 and emits static bionic
+binaries for all three Android ABIs. The r29 linker gives the 64-bit `arm64-v8a` and `x86_64` outputs 16 KB ELF `LOAD`
+alignment by default, while the 32-bit `armeabi-v7a` output remains 4 KB aligned. Override the toolchain with
+`NDK=/path/to/android-ndk make android`. Make does not track the compiler path or flags in object dependencies, so use
+`make -B android` whenever the NDK or Android flags change; otherwise old objects can be silently reused.
 
 There is no test suite. Verification is done against `testdata/`, which holds stock MIDletPascal projects reduced to the
 files the compiler reads. Both `-l`
