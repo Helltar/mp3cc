@@ -121,6 +121,14 @@ filename. It is 563 readable lines, and
 `yyrestart` takes a filename rather than a `FILE*`, which is the quickest tell. Edit it directly; do not look for a
 grammar to regenerate it from.
 
+**`parser/parser.c` is ISO-8859-1, and some search tools skip it in silence.** It is the only file in the tree that is
+not UTF-8. GNU grep and ripgrep read it as text and find everything in it; tools that drop non-UTF-8 files as binary do
+not — Claude Code's bundled `grep` (ugrep run with `-I`) returns no match and exit 1, no warning, unless it is given
+`-a`. That hides 6800 lines of the parser, so an empty tree-wide search is not evidence that something is unused. The
+standing example is `-r<next_record_id>`: the two lines that make it work,
+`new_type->unique_record_ID = next_record_ID; next_record_ID++;`, live in this file and nowhere else, and the option has
+been written off as dead code because of it.
+
 **Two preverifiers exist.** `preverifier/` is Sun's and is the one that runs.
 `classgen/preverify.c` is MIDletPascal's own stack-map generator, disabled upstream (see the commented `//PREVERIFY`
 call in `structures/block.c`). Don't confuse them when grepping; `preverify_bytecode` and `stack_map_*` belong to the

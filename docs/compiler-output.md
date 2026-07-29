@@ -44,6 +44,11 @@ The `^2` classes are fixed RTL helpers, each requested from a feature the progra
 `FW.class`, the MIDlet entry point, is always required but is *not* reported as a `^2` line — the IDE adds it to every
 build unconditionally.
 
+`^3` is the only marker that reports a file the compiler has already written rather than one it wants from the caller.
+The number in `R_<n>.class` counts up from `-r<next_record_id>` and starts over on every run, so an IDE compiling
+several modules into one directory has to remember the highest `<n>` it has seen and pass `-r <n+1>` to the next
+module. Skip that and the modules overwrite each other's record classes, without a word from the compiler.
+
 ## Diagnostics
 
 Errors and warnings carry a code and a source position:

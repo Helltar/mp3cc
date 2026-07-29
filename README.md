@@ -48,10 +48,10 @@ mp3CC \
 | `-c<canvas_type>`     | Canvas mode: `0` plain, `1` full-screen MIDP 2.0, or `2` full-screen Nokia        |
 | `-m<math_type>`       | Real numbers: `1` fixed-point (`F.class`, default) or `2` floating (`Real.class`) |
 
-| Optional             | Description                             |
-|----------------------|-----------------------------------------|
-| `-r<next_record_id>` | Initial ID for record types             |
-| `-d`                 | Detect required units without compiling |
+| Optional             | Description                                        |
+|----------------------|----------------------------------------------------|
+| `-r<next_record_id>` | First ID for this run's record classes — see below |
+| `-d`                 | Detect required units without compiling            |
 
 Both library options are required even when their directories are empty. For example, compile the single-file `Cubes`
 project with:
@@ -69,6 +69,14 @@ mkdir -p /tmp/mp3cc-out /tmp/emptylibs
 
 Units must be compiled before the program that uses them, into the same output directory — the compiler resolves `uses`
 through the `.bsf` symbol files left there by earlier runs.
+
+Record types are numbered per run rather than per project: each one declared becomes `R_<id>.class`, counting up from
+`-r<next_record_id>`, or from `0` when the option is left out. A build that compiles several modules into one output
+directory therefore has to hand each run the next free ID — take the highest `^3R_<n>.class` marker reported so far and
+add one. Without it every module starts over at `R_0` and their record classes overwrite each other in the output
+directory: the module compiled last wins, and the earlier ones go on referencing fields that class no longer has.
+Nothing reports this, and the type check does not catch it either, because record types are compared by that ID rather
+than by their fields.
 
 ## Documentation
 
