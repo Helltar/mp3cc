@@ -4676,7 +4676,8 @@ void RD_assignment_or_procedure_call(block *current_block)
 			return;
         }
         name = get_identifier(current_block, string_get_cstr(str_currrent_routine_name));
-		element_name = str_currrent_routine_name;
+		// a copy: element_name is destroyed below, and the routine name must outlive this statement
+		element_name = string_from_cstr(string_get_cstr(str_currrent_routine_name));
         if (name->identifier_class == procedure_name) // result in procedure
 		{
 			add_error_message(463, "result", "");
