@@ -2,7 +2,9 @@
 
 MIDletPascal 3.5 compiler, ported from 32-bit Windows to modern 64-bit Linux (x86_64, ARM64) and Android.
 
-MIDletPascal source in, preverified CLDC-1.0 Java class files for J2ME out. This is the compiler only — no IDE.
+MIDletPascal source in, preverified CLDC-1.0 Java class files for J2ME out. This is the compiler only — no IDE, and no
+runtime: the classes the output calls into (`FW`, `S`, `Real` and the rest) live in
+[midletpascal-rtl](https://github.com/Helltar/midletpascal-rtl) and go into the JAR next to the compiler's output.
 
 ## Building
 

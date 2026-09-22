@@ -42,7 +42,8 @@ The `^2` classes are fixed RTL helpers, each requested from a feature the progra
 | `SM.class`                              | any SMS routine                    |
 
 `FW.class`, the MIDlet entry point, is always required but is *not* reported as a `^2` line — the IDE adds it to every
-build unconditionally.
+build unconditionally. All ten classes are built from the MPS 3.1 sources in
+[midletpascal-rtl](https://github.com/Helltar/midletpascal-rtl); an IDE takes them from its `build/classes/`.
 
 `^3` is the only marker that reports a file the compiler has already written rather than one it wants from the caller.
 The number in `R_<n>.class` counts up from `-r<next_record_id>` and starts over on every run, so an IDE compiling
