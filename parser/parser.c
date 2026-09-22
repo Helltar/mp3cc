@@ -48,10 +48,10 @@ block *root_block;
 int next_record_ID;
 
 /* Scanner variables and functions */
-extern long int linenum;
+extern int linenum;          // int in lex.yy.c: a long here read 8 bytes of a 4-byte variable on lp64
 extern int new_linenum;
 extern long int integer_constant;
-extern int error_count;
+extern short int error_count; // short in error.c: an int here also read warning_count next to it
 extern float real_constant;
 extern char boolean_constant;
 extern char char_constant;
