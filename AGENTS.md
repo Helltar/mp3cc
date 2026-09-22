@@ -40,23 +40,27 @@ alignment by default, while the 32-bit `armeabi-v7a` output remains 4 KB aligned
 `NDK=/path/to/android-ndk make android`. Make does not track the compiler path or flags in object dependencies, so use
 `make -B android` whenever the NDK or Android flags change; otherwise old objects can be silently reused.
 
-There is no test suite. Verification is done against `testdata/`, which holds stock MIDletPascal projects reduced to the
-files the compiler reads. Both `-l`
-and `-p` must be passed even when the directory is empty, hence the throwaway
-`emptylibs`:
+There is no test suite. Verification is done against the two projects in `testdata/`: `Selftest`, one file written to
+use every type, statement, extension and runtime helper class the compiler knows, and `CatchRect`, five units and an
+external library. Both `-l` and `-p` must be passed even when the directory is empty, hence the throwaway `emptylibs`:
 
 ```sh
 mkdir -p /tmp/out /tmp/emptylibs
+for m in 1 2; do
+  ./Release/mp3CC -s"testdata/Selftest/src/selftest.pas" -o/tmp/out \
+     -l/tmp/emptylibs -p/tmp/emptylibs -c0 -m$m || echo "FAIL selftest -m$m"
+done
 for u in ucore uplatfrm urect ugame catchrect; do
   ./Release/mp3CC -s"testdata/CatchRect/src/$u.pas" -o/tmp/out \
      -l/tmp/emptylibs -p"testdata/CatchRect/libs" -c0 -m2 || echo "FAIL $u"
 done
 ```
 
-CatchRect is the case worth running: five compilation units that must be built in that exact order, because `uses`
-resolves through the `.bsf` symbol files earlier runs leave in the output directory, and it is the only project pulling
-in an external library. The single-file projects have no `uses` clause at all and exercise much less — useful as a quick
-smoke test, not as a regression check.
+Selftest is the widest input: it must compile in both math modes with one warning (`W464`, deliberate) and report
+every `^2` class. CatchRect's five units must be built in that exact order, because `uses` resolves through the `.bsf`
+symbol files earlier runs leave in the output directory, and it is the only project pulling in an external library.
+Selftest also runs: on a phone or emulator it checks its own results against known answers and draws the tally, so a
+codegen bug that compiles cleanly still shows up there.
 
 Check the result is real Java, not just bytes:
 
@@ -77,18 +81,24 @@ make && make arm64
 mkdir -p /tmp/emptylibs
 for arch in x86 arm; do
   [ $arch = arm ] && run="qemu-aarch64 Release-arm64/mp3CC" || run="Release/mp3CC"
-  rm -rf /tmp/out-$arch && mkdir -p /tmp/out-$arch
+  rm -rf /tmp/out-$arch && mkdir -p /tmp/out-$arch/m1 /tmp/out-$arch/m2 /tmp/out-$arch/cr
+  for m in 1 2; do
+    $run -s"testdata/Selftest/src/selftest.pas" -o/tmp/out-$arch/m$m \
+       -l/tmp/emptylibs -p/tmp/emptylibs -c0 -m$m >/dev/null
+  done
   for u in ucore uplatfrm urect ugame catchrect; do
-    $run -s"testdata/CatchRect/src/$u.pas" -o/tmp/out-$arch \
+    $run -s"testdata/CatchRect/src/$u.pas" -o/tmp/out-$arch/cr \
        -l/tmp/emptylibs -p"testdata/CatchRect/libs" -c0 -m2 >/dev/null
   done
 done
 diff -r /tmp/out-x86 /tmp/out-arm && echo identical
 ```
 
-The compiler is deterministic, so any divergence between x86-64 and aarch64 is a word-size or sign-extension bug —
-exactly the class of defect this codebase is full of. `qemu-aarch64` runs the ARM binary natively enough for this. The
-check passes today, which is the point: it is cheap and it fails loudly.
+The compiler is deterministic, so any divergence between x86-64 and aarch64 is a word-size, sign-extension or
+declaration-mismatch bug — exactly the class of defect this codebase is full of. `qemu-aarch64` runs the ARM binary
+natively enough for this. The check passes today, which is the point: it is cheap and it fails loudly. Count the class
+files too: a missing `M.class` with exit status 0 is what a mismatched `extern` looked like, and `diff -r` reports it
+as "Only in".
 
 ## Hazards
 
@@ -144,7 +154,7 @@ that way — changes there should be the minimum needed to build.
 
 Upstream is
 [`MPC.3.5.IDE`](https://sourceforge.net/p/midletpascal/code/HEAD/tree/MPC.3.5.IDE/)
-from the MIDletPascal SourceForge SVN at r15, targeting 32-bit MSVC. Six classes of fix were needed. The interesting
+from the MIDletPascal SourceForge SVN at r15, targeting 32-bit MSVC. Eight classes of fix were needed. The interesting
 ones:
 
 - **`string_list.c` never included `memory.h`.** `mem_alloc` fell back to an implicit `int` declaration, truncating
@@ -162,6 +172,15 @@ ones:
   had evidently never been compiled by anyone.
 - The `windows.h` / WOW64 `WM_COPYDATA` block in `main.c` and `_stricmp` in
   `name_table.h` are now behind `WIN32`.
+- **`result :=` freed the routine's name.** `parser.c` aliased the global `str_currrent_routine_name` as the
+  statement's `element_name` and destroyed it at the end of the statement, so the second `result :=` in the same
+  function read freed memory: a segfault on every platform, including the binaries ANPASIDE shipped. Upstream got away
+  with it because the old CRT left freed blocks intact.
+- **Two `extern` declarations in `parser.c` did not match their definitions.** `error_count` is a `short` in
+  `error.c` but was declared `int`, so the parser read `warning_count` in the upper half and, on the arm64 build, any
+  program with a warning produced no class file and exit status 0; `linenum` was `long` against an `int`. Same
+  root cause as `get4bytes`: on 32-bit MSVC, `int` and `long` are the same size and the adjacent bytes happened to be
+  zero.
 
 `MPC.3.1.LINUX` in the upstream repository is not a working Linux port despite the name — it contains only a Makefile
 and one patched header, and does not build. That Makefile was the starting point for this one.

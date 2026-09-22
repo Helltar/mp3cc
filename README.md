@@ -55,13 +55,13 @@ mp3CC \
 | `-r<next_record_id>` | First ID for this run's record classes — see below |
 | `-d`                 | Detect required units without compiling            |
 
-Both library options are required even when their directories are empty. For example, compile the single-file `Cubes`
-project with:
+Both library options are required even when their directories are empty. For example, compile the single-file
+`Selftest` program with:
 
 ```sh
 mkdir -p /tmp/mp3cc-out /tmp/emptylibs
 ./Release/mp3CC \
-  -s"testdata/Cubes/src/cubes.pas" \
+  -s"testdata/Selftest/src/selftest.pas" \
   -o"/tmp/mp3cc-out" \
   -l"/tmp/emptylibs" \
   -p"/tmp/emptylibs" \
