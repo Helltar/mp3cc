@@ -1,4 +1,9 @@
+.agents/
+.claude/
+.codex/
 .idea/
+
+CLAUDE.local.md
 
 Release/
 Debug/
