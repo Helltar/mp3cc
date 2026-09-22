@@ -98,4 +98,7 @@ by Niksa Orlic (1.x–2.0) and Artem (3.0).
 
 GPLv3, as in upstream — see `LICENSE.txt`, with the full text in `COPYING`.
 
-`preverifier/` comes from Sun's J2ME CLDC reference implementation and keeps its original copyright headers.
+`preverifier/` is Sun's KVM preverifier from the CLDC reference implementation, carried over from upstream MIDletPascal
+as it was, with its original 1995–2002 Sun copyright headers. Sun later published the same code in
+[phoneME](https://en.wikipedia.org/wiki/PhoneME) under GPL v2 only; the inconsistency with the rest of the tree is
+inherited from upstream, not introduced here.
