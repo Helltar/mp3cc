@@ -8,6 +8,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 #include "memory.h"
 #include "error.h"
@@ -17,6 +18,54 @@
 
 static memory_object* memory_object_list_begin = NULL;
 static memory_object* memory_object_list_end = NULL;
+
+/*
+	every live block is also indexed by its address. mem_free and mem_realloc used to
+	walk the whole list from its first block to find the one they were handed, so each
+	call cost as much as there were live blocks, and a unit of a few tens of kilobytes
+	took minutes to compile on a phone. the list itself stays: mem_close still frees
+	whatever was left in it, and a pointer that is not in it is still ignored.
+*/
+#define HASH_BITS 16
+#define HASH_SIZE (1 << HASH_BITS)
+
+static memory_object* memory_object_hash[HASH_SIZE];
+
+static unsigned int hash_of(char *data)
+{
+	uintptr_t value = (uintptr_t) data;
+
+	return ((unsigned int) (value >> 4) * 2654435761u) >> (32 - HASH_BITS);
+}
+
+static void hash_insert(memory_object *object)
+{
+	unsigned int bucket = hash_of(object->data);
+
+	object->hash_next = memory_object_hash[bucket];
+	memory_object_hash[bucket] = object;
+}
+
+/* takes the block that owns the address out of the index, NULL if there is none */
+static memory_object* hash_remove(char *data)
+{
+	memory_object **link = &memory_object_hash[hash_of(data)];
+
+	while (*link != NULL)
+	{
+		memory_object *object = *link;
+
+		if (object->data == data)
+		{
+			*link = object->hash_next;
+			return object;
+		}
+
+		link = &object->hash_next;
+	}
+
+	return NULL;
+}
 
 
 /*
@@ -28,7 +77,9 @@ void mem_init()
 	memory_object_list_begin->next = NULL;
 	memory_object_list_begin->prev = NULL;
 	memory_object_list_begin->data = NULL;
+	memory_object_list_begin->hash_next = NULL;
 	memory_object_list_end = memory_object_list_begin;
+	memset(memory_object_hash, 0, sizeof(memory_object_hash));
 }
 
 /*
@@ -79,6 +130,10 @@ void* mem_alloc(size_t s)
 	memory_object_list_end->next = wrapper;
 	memory_object_list_end = wrapper;
 
+#if SLOWLIST
+	hash_insert(wrapper);
+#endif
+
 	if (memory_object_list_end == NULL)
 		die(26);
 
@@ -99,23 +154,18 @@ void* mem_realloc(char* old_block, int s)
 	prev = next = NULL;
 
 #if SLOWLIST
+	/* a block that was never allocated here is a plain allocation */
+	if (old_block == NULL)
+		return mem_alloc(s);
+
 	/* find the block */
 	{
-		memory_object *it = memory_object_list_begin;
+		memory_object *it = hash_remove(old_block);
 
-		while (it != NULL)
-		{
-			if (it->data == old_block)
-			{				
-				break;
-			}
-
-			it = it->next;
-		}
-	
 		it->data = realloc(it->data, s);
-		
-		return it->data;		
+		hash_insert(it);
+
+		return it->data;
 	}
 #else
 	prev = ((memory_object*)(old_block - sizeof(memory_object)))->prev;
@@ -163,31 +213,16 @@ void mem_free(char* old_block)
 #if SLOWLIST
 	/* find the block */
 	{
-		memory_object *it = memory_object_list_begin;
-
-		while (it != NULL)
-		{
-			if (it->data == old_block)
-			{
-				prev = it->prev;
-				next = it->next;
-
-				if (prev == NULL)
-				{
-					int a = 1;
-				}
-
-				free(old_block);
-				free(it);
-
-				break;
-			}
-
-			it = it->next;
-		}
+		memory_object *it = hash_remove(old_block);
 
 		if (it == NULL)
 			return;
+
+		prev = it->prev;
+		next = it->next;
+
+		free(old_block);
+		free(it);
 	}
 #else
 	prev = ((memory_object*)(old_block - sizeof(memory_object)))->prev;

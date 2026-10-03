@@ -13,6 +13,7 @@ struct memory_object_struct
 	struct memory_object_struct *next;
 	struct memory_object_struct *prev;
 	char *data;
+	struct memory_object_struct *hash_next; /* next block in the same address bucket */
 };
 
 typedef struct memory_object_struct memory_object;
