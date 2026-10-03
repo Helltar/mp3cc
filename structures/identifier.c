@@ -246,10 +246,14 @@ void bsf_write_integer_constant(long int value, char* name)
 {
 	char tag = 1;
 	char type = 1;
+	/* read back as an int (structures/block.c); a long is 8 bytes on a 64-bit build,
+	   and those 4 extra bytes shifted every symbol declared after the constant */
+	int stored = (int) value;
+
 	fwrite(&tag, 1, 1, symbols_file);
 	bsf_write_STRING(name);
 	fwrite(&type, 1, 1, symbols_file);
-	fwrite(&value, sizeof(long int), 1, symbols_file);
+	fwrite(&stored, sizeof(int), 1, symbols_file);
 }
 
 void bsf_write_real_constant(float value, char* name)
@@ -498,8 +502,16 @@ type* bsf_read_TYPE(FILE* symbol_file)
 
 		result_type->interval_base_type = (enum en_type_class)base_type_class;
 
-		fread(&result_type->first_element, sizeof(long int), 1, symbol_file);
-		fread(&result_type->last_element, sizeof(long int), 1, symbol_file);
+		/* written as 4 bytes each; reading a long took 8 on a 64-bit build and
+		   shifted every symbol declared after an array or a subrange */
+		{
+			int bound;
+
+			fread(&bound, sizeof(int), 1, symbol_file);
+			result_type->first_element = bound;
+			fread(&bound, sizeof(int), 1, symbol_file);
+			result_type->last_element = bound;
+		}
 	}
 
 	return result_type;
