@@ -732,7 +732,7 @@ void RD_const_declaration(block *current_block)
 					integer_constant*sign_factor, string_get_cstr(constant_name));
 
 				if (inside_interface_part)
-					bsf_write_integer_constant(integer_constant, string_get_cstr(constant_name));
+					bsf_write_integer_constant(integer_constant*sign_factor, string_get_cstr(constant_name));
 
 				current_token = yylex();
 				break;
