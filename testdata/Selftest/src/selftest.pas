@@ -346,6 +346,108 @@ begin
   Check('result and exit', (FirstNegative(1, -2, -3) = -2) and (FirstNegative(1, 2, 3) = 0));
 end;
 
+{ ----------------------------------------------------------------- case }
+
+function Bucket(n: integer): integer;
+begin
+  case n of
+    0: result := 1;
+    1, 2, 3: result := 2;
+    10..19: result := 3;
+    -5..-1: result := 4;
+    NEG: result := 5;             // a named constant
+    -100, 100..199, MASK: result := 6;
+  else
+    result := 0;
+  end;
+end;
+
+function CharKind(c: char): integer;
+begin
+  result := 0;
+  case c of
+    'a', 'e', 'i', 'o', 'u': result := 1;
+    '0'..'9': result := 2;
+    LETTER_A..LETTER_B: result := 3;
+    #32: result := 4;
+  end;
+end;
+
+function Word(s: string): integer;
+begin
+  case s of
+    'one': result := 1;
+    'two', 'deux': result := 2;
+    GREETING: result := 3;
+    'x': result := 4;             // one char, compared as a string
+    '': result := 5;
+    else result := 0;
+  end;
+end;
+
+function Cell(row, col: integer): integer;
+begin
+  result := 0;
+  case row of
+    1: case col of
+         1: result := 11;
+         2: result := 12;
+         else result := 10;
+       end;
+    2: case col of
+         1: result := 21;
+       end;
+    else
+      case col of
+        1: result := 91;
+        else result := 90;
+      end;
+  end;
+end;
+
+// after a ';' the else is the case's, not the if's in front of it
+function Guarded(n: integer; flag: boolean): integer;
+begin
+  result := 0;
+  case n of
+    1: if flag then result := 1;
+    2: if flag then result := 2 else result := 3;
+    else result := 9;
+  end;
+end;
+
+procedure TestCase;
+var
+  i, n: integer;
+begin
+  Check('case value', (Bucket(0) = 1) and (Bucket(4) = 0));
+  Check('case list', (Bucket(1) = 2) and (Bucket(2) = 2) and (Bucket(3) = 2));
+  Check('case range', (Bucket(10) = 3) and (Bucket(19) = 3) and (Bucket(9) = 0) and (Bucket(20) = 0));
+  Check('case negative range', (Bucket(-5) = 4) and (Bucket(-1) = 4) and (Bucket(-6) = 0));
+  Check('case constant', Bucket(-42) = 5);
+  Check('case mixed list', (Bucket(-100) = 6) and (Bucket(150) = 6) and (Bucket(255) = 6) and (Bucket(200) = 0));
+  Check('case char', (CharKind('e') = 1) and (CharKind('z') = 0));
+  Check('case char range', (CharKind('0') = 2) and (CharKind('9') = 2) and (CharKind(':') = 0));
+  Check('case char constants', (CharKind('A') = 3) and (CharKind('B') = 3) and (CharKind(' ') = 4));
+  Check('case string', (Word('one') = 1) and (Word('deux') = 2) and (Word('On' + 'e') = 0));
+  Check('case string constant', Word('hel' + 'lo') = 3);
+  Check('case string of one char', (Word('x') = 4) and (Word('') = 5));
+  Check('case nested', (Cell(1, 2) = 12) and (Cell(1, 3) = 10) and (Cell(2, 2) = 0) and (Cell(3, 1) = 91));
+  Check('case else after if', (Guarded(1, false) = 0) and (Guarded(2, false) = 3) and (Guarded(3, true) = 9));
+  n := 0;
+  for i := 1 to 10 do
+    case i * 2 of                // any expression can be the selector
+      2..6: n := n + i;
+      8: ;                       // an empty arm
+      10: begin
+            n := n + 100;
+            break;               // leaves the loop from inside the case
+          end;
+      else n := n + 1000;
+    end;
+  Check('case in a loop', n = 106);
+end;
+
 { ---------------------------------------------------------- extensions }
 
 // raw jvm bytecode: the block below adds two constants and drops the
@@ -667,6 +769,7 @@ begin
   TestArrays;
   TestRecords;
   TestControlFlow;
+  TestCase;
   TestBytecode;
   TestRecordStore;
   TestResources;

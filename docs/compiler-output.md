@@ -80,6 +80,7 @@ are most likely to meet:
 | `E446` | arrays inside records are not implemented                           |
 | `E448` | failed to load library/unit `'…'`                                   |
 | `E459` | identifier `'…'` found in several units — qualify it as `unit.name` |
+| `E465` | duplicate case label                                                |
 
 MIDletPascal is a deliberately small dialect: several standard-Pascal features are rejected rather than compiled.
 
@@ -90,7 +91,6 @@ MIDletPascal is a deliberately small dialect: several standard-Pascal features a
 | `E215` | `with`                        |
 | `E431` | nested procedures / functions |
 | `E435` | files                         |
-| `E442` | `case`                        |
 
 Only three warnings are ever emitted, and compilation continues past all of them: **W210** (`packed` arrays are treated
 as ordinary arrays), **W436** (`var` / by-reference parameters are ignored) and **W464** (`inline(…)` is deprecated —

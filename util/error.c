@@ -121,7 +121,6 @@ char *msg(int i){
 	case 439: return "only integer type can be used as string index";
 	case 440: return "variables of interval type are not supported";
 	case 441: return "only forward declaration supplied; the implementation is missing";
-	case 442: return "case statement is not supported in this version";
 	case 443: return "a value cannot be asigned to an array. This is a limitation of MIDletPascal";
 	case 444: return "unknown identifier";
 	case 445: return "name of the procedure/function has already been taken by another identifier";
@@ -144,6 +143,7 @@ char *msg(int i){
 	case 462: return "inlined label \'%d\' (offs:%d) tableswitch / loookupswitch";
 	case 463: return "keyword \'%s\' is not allowed here.";
 	case 464: return "use bytecode/end instead of inline() which might be deprecated";
+	case 465: return "duplicate case label";
 	}
 }
 

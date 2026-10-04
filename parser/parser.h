@@ -24,7 +24,6 @@ void RD_inline_body(block*);
 void RD_statement(block *);
 void RD_if_statement(block *);
 void RD_case_statement(block *);
-void RD_case_list(block*, type*);
 void RD_while_statement(block*);
 void RD_repeat_statement(block*);
 void RD_for_statement(block*);

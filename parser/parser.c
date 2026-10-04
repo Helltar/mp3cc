@@ -81,6 +81,13 @@ extern int detect_units_only;
 
 int inside_loop = 0; /* the counter checks if 'break' is located inside a loop */
 
+/*
+	set while the statement of a case arm is parsed, cleared again inside
+	begin-end, repeat-until and the else part of the case. there an 'else' that
+	follows a ';' belongs to the case and not to an 'if' in front of it.
+*/
+int else_ends_case_arm = 0;
+
 int compiling_unit = 0; /* set to 1 if this is an unit */
 int inside_interface_part = 0; /* if the compiler is inside the interface part of the unit */
 int inside_implementation_part = 0; /* if the compiler is inside the implementation part of the unit */
@@ -1673,8 +1680,13 @@ void RD_statement(block *current_block)
 	{
 	case KWD_BEGIN:
 		{
+			int outer_else_ends_case_arm = else_ends_case_arm;
+
 			current_token = yylex();
+
+			else_ends_case_arm = 0;
 			RD_block_body(current_block);
+			else_ends_case_arm = outer_else_ends_case_arm;
 
 			if (current_token != KWD_END)
 			{
@@ -2752,8 +2764,11 @@ void RD_if_statement(block *current_block)
 
 	RD_statement(current_block);
 
-	while (current_token == SEMI_COLON)
-		current_token = yylex();
+	if (!else_ends_case_arm)
+	{
+		while (current_token == SEMI_COLON)
+			current_token = yylex();
+	}
 
 	if (current_token == KWD_ELSE)
 	{
@@ -2786,6 +2801,10 @@ void RD_if_statement(block *current_block)
 		current_block->code->bytecode[jump_offset_position] = (char) (offset>>8);
 		current_block->code->bytecode[jump_offset_position+1] = (char) offset;
 
+		/* in a case arm the ';' was not skipped and is still the current token */
+		if (current_token == SEMI_COLON)
+			return;
+
 		/* put the current token back to stream and preceed it with ';' */
 		yycopy = strdup(yytext);
 
@@ -2799,177 +2818,397 @@ void RD_if_statement(block *current_block)
 }
 
 /*
-	The case-of statement. The rule used is:
+	the case-of statement:
 
-	<RD_case_statement> -> <RD_expression> OF
-	                         <RD_case_list> end
+	<RD_case_statement> -> <RD_expression> of
+	                         ( <RD_case_list> : <RD_statement> ; )*
+	                         [ else <RD_block_body> ] end
+
+	the selector stays on the stack while the labels are compared with it one
+	after another, so a label costs a dup and no local variable is needed; every
+	arm and the else part begin by popping it, which leaves the stack empty for
+	the statements inside, a break or a nested case among them. a chain of
+	comparisons instead of tableswitch / lookupswitch also serves strings and
+	ranges.
 */
-void RD_case_statement(block *current_block)
+
+/* the branch instructions of a case that still wait for their target */
+typedef struct
 {
-	type *expression_type;
-	expression_type = RD_expression(current_block);
+	int *positions;
+	int count;
+} case_jumps;
 
-	add_error_message(442, "", "");
+/* a label already seen in a case: low..high, or a string when text is set */
+typedef struct
+{
+	int low;
+	int high;
+	char *text;
+} case_label;
 
-	if ((expression_type->type_class != error_type) /* a simple error-recovery */
-		&& (expression_type->type_class != integer_type)
-		&& (expression_type->type_class != char_type)
-		&& (expression_type->type_class != string_type))
-	{
-		add_error_message(408, "", "");
-	}
+typedef struct
+{
+	case_label *items;
+	int count;
+} case_labels;
 
-	if (current_token != KWD_OF)
-	{
-		add_error_message(203, "of", YYTEXT_STRING);
-	}
 
-	current_token = yylex();
+/* appends a branch whose offset is filled in by case_jumps_resolve */
+static void case_jumps_add(case_jumps *jumps, bytecode *code, char opcode)
+{
+	jumps->positions = (int*) realloc(jumps->positions, (jumps->count + 1) * sizeof(int));
 
-	RD_case_list(current_block, expression_type);
+	if (jumps->positions == NULL)
+		die(1);
 
-	if (current_token != KWD_END)
-	{
-		add_error_message(203, "end", YYTEXT_STRING);
-	}
+	jumps->positions[jumps->count] = code->bytecode_pos;
+	jumps->count ++;
 
-	current_token = yylex();
-	type_destroy(expression_type);
+	bytecode_append(code, opcode);
+	bytecode_append_short_int(code, 0);
+}
+
+
+/* points the branch at branch_pos to the current end of the code */
+static void case_jump_here(bytecode *code, int branch_pos)
+{
+	int offset = code->bytecode_pos - branch_pos;
+
+	code->bytecode[branch_pos + 1] = (char) (offset >> 8);
+	code->bytecode[branch_pos + 2] = (char) offset;
+}
+
+
+static void case_jumps_resolve(case_jumps *jumps, bytecode *code)
+{
+	int i;
+
+	for (i = 0; i < jumps->count; i ++)
+		case_jump_here(code, jumps->positions[i]);
+
+	free(jumps->positions);
+	jumps->positions = NULL;
+	jumps->count = 0;
 }
 
 
 /*
-	The case expression's list.
-
-	<RD_case_list> -> ( CONST (, CONST)* : <RD_statement> )+
+	remembers a label, taking over its text. returns 0 and frees the text if
+	the label repeats or overlaps one that is already there.
 */
-void RD_case_list(block *current_block, type *case_type)
+static int case_labels_add(case_labels *labels, case_label *label)
 {
+	int i;
+
+	for (i = 0; i < labels->count; i ++)
+	{
+		case_label *seen = &labels->items[i];
+		int same;
+
+		if ((label->text != NULL) || (seen->text != NULL))
+			same = (label->text != NULL) && (seen->text != NULL) && (strcmp(label->text, seen->text) == 0);
+		else
+			same = (label->low <= seen->high) && (seen->low <= label->high);
+
+		if (same)
+		{
+			free(label->text);
+			return 0;
+		}
+	}
+
+	labels->items = (case_label*) realloc(labels->items, (labels->count + 1) * sizeof(case_label));
+
+	if (labels->items == NULL)
+		die(1);
+
+	labels->items[labels->count] = *label;
+	labels->count ++;
+
+	return 1;
+}
+
+
+/*
+	one constant of a case label:
+
+	<RD_case_constant> -> [-] CST_INTEGER | CST_CHAR | CST_STRING | [IDN .] IDN
+
+	the code that is generated puts its value on the stack, as the type of the
+	selector. returns 0 if there is no constant at all, -1 if there is one that
+	can not be used and was reported, 1 if label holds its value.
+*/
+static int RD_case_constant(block *current_block, type *case_type, case_label *label)
+{
+	type *constant_type;
+	int negative = 0;
+	int valid = 1;
+
+	label->low = 0;
+	label->high = 0;
+	label->text = NULL;
+
+	if (current_token == OP_MINUS)
+	{
+		negative = 1;
+		current_token = yylex();
+	}
+
+	switch (current_token)
+	{
+	case CST_INTEGER:
+		{
+			if (negative)
+				integer_constant = -integer_constant;
+
+			negative = 0;
+			label->low = integer_constant;
+			constant_type = RD_value(current_block);
+			break;
+		}
+
+	case CST_CHAR:
+		{
+			label->low = char_constant;
+			constant_type = RD_value(current_block);
+			break;
+		}
+
+	case CST_STRING:
+		{
+			label->text = strdup(string_get_cstr(string_constant));
+			constant_type = RD_value(current_block);
+			break;
+		}
+
+	case CST_REAL:
+	case CST_BOOLEAN:
+		{
+			/* never the type of a selector, reported below */
+			constant_type = RD_value(current_block);
+			break;
+		}
+
+	case IDENTIFIER:
+		{
+			identifier *name;
+
+			name = get_identifier(current_block, YYTEXT_STRING);
+
+			/* unit.constant */
+			if (name->identifier_class == unit_name)
+			{
+				current_token = yylex();
+
+				if (current_token != DOT)
+					add_error_message(200, ".", YYTEXT_STRING);
+				else
+				{
+					string *member_name;
+					identifier *member;
+
+					current_token = yylex();
+
+					member_name = string_from_cstr(YYTEXT_STRING);
+					member = name_table_find(name->unit_block->names, member_name);
+					string_destroy(member_name);
+
+					identifier_destroy(name);
+
+					if (member != NULL)
+						name = identifier_duplicate(member);
+					else
+						name = identifier_create();
+				}
+			}
+
+			if (name->identifier_class != constant_name)
+			{
+				add_error_message(410, YYTEXT_STRING, "");
+				constant_type = type_create();
+				constant_type->type_class = error_type;
+			}
+			else
+			{
+				create_constant_bytecode(name, current_block->code);
+				constant_type = type_duplicate(name->constant_type);
+
+				if (constant_type->type_class == string_type)
+					label->text = strdup(string_get_cstr(name->constant_string_value));
+				else
+					label->low = name->constant_int_value;
+			}
+
+			identifier_destroy(name);
+			current_token = yylex();
+			break;
+		}
+
+	default:
+		return 0;
+	}
+
+	if (negative)
+	{
+		if (constant_type->type_class == integer_type)
+		{
+			bytecode_append(current_block->code, ineg$);
+			label->low = -label->low;
+		}
+		else if (constant_type->type_class != error_type)
+		{
+			add_error_message(417, "", "");
+			constant_type->type_class = error_type;
+		}
+	}
+
+	/* a char label of a string selector is compared as a string of one char */
+	if ((constant_type->type_class == char_type)
+		&& (case_type->type_class == string_type))
+	{
+		char text[2];
+
+		bytecode_append(current_block->code, invokestatic$);
+		bytecode_append_short_int(current_block->code,
+			cp_add_methodref("java/lang/String", "valueOf", "(C)Ljava/lang/String;"));
+
+		text[0] = (char) label->low;
+		text[1] = '\0';
+		label->text = strdup(text);
+
+		constant_type->type_class = string_type;
+	}
+
+	if ((constant_type->type_class == error_type)
+		|| (case_type->type_class == error_type))
+	{
+		valid = 0;
+	}
+	else if (constant_type->type_class != case_type->type_class)
+	{
+		string *expected_type_name;
+		string *constant_type_name;
+
+		expected_type_name = type_get_name(case_type);
+		constant_type_name = type_get_name(constant_type);
+
+		add_error_message(409, string_get_cstr(expected_type_name), string_get_cstr(constant_type_name));
+
+		string_destroy(expected_type_name);
+		string_destroy(constant_type_name);
+
+		valid = 0;
+	}
+
+	type_destroy(constant_type);
+
+	if (!valid)
+	{
+		free(label->text);
+		label->text = NULL;
+		return -1;
+	}
+
+	return 1;
+}
+
+
+/*
+	the labels of one arm of a case, up to and including the colon:
+
+	<RD_case_list> -> <label> (, <label>)* :
+	<label>        -> <RD_case_constant> [ .. <RD_case_constant> ]
+
+	every label compares the selector with its constants and jumps to the
+	statement of the arm, through arm_jumps, when they match. returns 0 if the
+	colon was not found and the case can not be parsed any further.
+*/
+static int RD_case_list(block *current_block, type *case_type, case_jumps *arm_jumps, case_labels *labels)
+{
+	bytecode *code = current_block->code;
 	short int first_pass = 1;
 
 	do
 	{
+		case_label label;
+		int valid;
+
 		if (first_pass)
 			first_pass = 0;
 		else
 			current_token = yylex();
 
-		switch(current_token)
+		bytecode_append(code, dup$);
+		valid = RD_case_constant(current_block, case_type, &label);
+
+		if (valid == 0)
 		{
-		case CST_INTEGER:
-			{
-				if (case_type->type_class != integer_type)
-				{
-					string *expected_type_name;
-					expected_type_name = type_get_name(case_type);
-					add_error_message(409, string_get_cstr(expected_type_name), "integer");
-					string_destroy(expected_type_name);
-				}
-				current_token = yylex();
-				break;
-			}
-
-		case CST_REAL:
-			{
-				string *expected_type_name;
-				expected_type_name = type_get_name(case_type);
-				add_error_message(409, string_get_cstr(expected_type_name), "real");
-				string_destroy(expected_type_name);
-
-				current_token = yylex();
-				break;
-			}
-
-		case CST_BOOLEAN:
-			{
-
-				string *expected_type_name;
-				expected_type_name = type_get_name(case_type);
-				add_error_message(409, string_get_cstr(expected_type_name), "boolean");
-				string_destroy(expected_type_name);
-
-				current_token = yylex();
-				break;
-			}
-
-		case CST_CHAR:
-			{
-				if (case_type->type_class != char_type)
-				{
-					string *expected_type_name;
-					expected_type_name = type_get_name(case_type);
-					add_error_message(409, string_get_cstr(expected_type_name), "char");
-					string_destroy(expected_type_name);
-				}
-				current_token = yylex();
-				break;
-			}
-
-		case CST_STRING:
-			{
-				if (case_type->type_class != string_type)
-				{
-					string *expected_type_name;
-					expected_type_name = type_get_name(case_type);
-					add_error_message(409, string_get_cstr(expected_type_name), "string");
-					string_destroy(expected_type_name);
-				}
-				current_token = yylex();
-				break;
-			}
-
-		case IDENTIFIER:
-			{
-				/* find the constant type for the given identifier */
-				type *constant_type;
-
-				constant_type = get_constant_type(current_block, YYTEXT_STRING);
-
-				if (constant_type->type_class == error_type)
-					add_error_message(410, YYTEXT_STRING, "");
-				else
-					if (!type_equal(constant_type, case_type))
-					{
-						string *expected_type_name;
-						string *constant_type_name;
-
-						expected_type_name = type_get_name(case_type);
-						constant_type_name = type_get_name(constant_type);
-
-						add_error_message(409, string_get_cstr(expected_type_name), string_get_cstr(constant_type_name));
-
-						string_destroy(expected_type_name);
-						string_destroy(constant_type_name);
-					}
-
-					type_destroy(constant_type);
-
-				current_token = yylex();
-				break;
-			}
-
-		default:
-			{
-				add_error_message(206, "", "");
-
-				/* Error-recovery: find the first : */
-				while ((current_token != COLON)
-					&& (current_token != END_OF_INPUT))
-				{
-					current_token = yylex();
-				}
-
-				if (current_token == END_OF_INPUT)
-					return;
-
-				break;
-			}
+			add_error_message(206, "", "");
+			break;
 		}
 
+		label.high = label.low;
+
+		if (current_token == DOTDOT)
+		{
+			case_label upper;
+			int upper_valid;
+			int below_pos;
+
+			/* below the range: on to the next label */
+			below_pos = code->bytecode_pos;
+			bytecode_append(code, if_icmplt$);
+			bytecode_append_short_int(code, 0);
+
+			current_token = yylex();
+
+			bytecode_append(code, dup$);
+			upper_valid = RD_case_constant(current_block, case_type, &upper);
+
+			if (upper_valid == 0)
+			{
+				add_error_message(206, "", "");
+				free(label.text);
+				break;
+			}
+
+			case_jumps_add(arm_jumps, code, if_icmple$);
+			case_jump_here(code, below_pos);
+
+			if ((valid != 1) || (upper_valid != 1))
+				valid = -1;
+			else if (case_type->type_class == string_type)
+			{
+				add_error_message(411, "", "");
+				valid = -1;
+			}
+			else if (upper.low < label.low)
+			{
+				add_error_message(437, "", "");
+				valid = -1;
+			}
+			else
+				label.high = upper.low;
+
+			free(upper.text);
+		}
+		else if (case_type->type_class == string_type)
+		{
+			bytecode_append(code, invokevirtual$);
+			bytecode_append_short_int(code,
+				cp_add_methodref("java/lang/String", "compareTo", "(Ljava/lang/String;)I"));
+			case_jumps_add(arm_jumps, code, ifeq$);
+		}
+		else
+			case_jumps_add(arm_jumps, code, if_icmpeq$);
+
+		if (valid != 1)
+			free(label.text);
+		else if (!case_labels_add(labels, &label))
+			add_error_message(465, "", "");
 
 	} while (current_token == COMMA);
-
-	current_token = yylex();
 
 	if (current_token != COLON)
 	{
@@ -2977,18 +3216,147 @@ void RD_case_list(block *current_block, type *case_type)
 
 		/* Error-recovery: find the first : */
 		while ((current_token != COLON)
+			&& (current_token != KWD_END)
 			&& (current_token != END_OF_INPUT))
 		{
 			current_token = yylex();
 		}
 
-		if (current_token == END_OF_INPUT)
-			return;
+		if (current_token != COLON)
+			return 0;
 	}
 
 	current_token = yylex();
 
-	RD_statement(current_block);
+	return 1;
+}
+
+
+void RD_case_statement(block *current_block)
+{
+	bytecode *code = current_block->code;
+	type *expression_type;
+	case_jumps end_jumps = { NULL, 0 };
+	case_labels labels = { NULL, 0 };
+	int outer_else_ends_case_arm = else_ends_case_arm;
+	int i;
+
+	expression_type = RD_expression(current_block);
+
+	if ((expression_type->type_class != error_type) /* a simple error-recovery */
+		&& (expression_type->type_class != integer_type)
+		&& (expression_type->type_class != char_type)
+		&& (expression_type->type_class != string_type))
+	{
+		add_error_message(408, "", "");
+		expression_type->type_class = error_type;
+	}
+
+	if (current_token != KWD_OF)
+	{
+		add_error_message(203, "of", YYTEXT_STRING);
+	}
+	else
+		current_token = yylex();
+
+	while ((current_token != KWD_END)
+		&& (current_token != KWD_ELSE)
+		&& (current_token != END_OF_INPUT))
+	{
+		case_jumps arm_jumps = { NULL, 0 };
+		int next_arm_pos;
+		int parsed;
+
+		parsed = RD_case_list(current_block, expression_type, &arm_jumps, &labels);
+
+		/*
+			no label matched: on to the next arm. a plain label at the end of
+			the list has its own branch turned around for that; a range needs
+			a goto, as its lower bound has to get there too.
+		*/
+		next_arm_pos = code->bytecode_pos - 3;
+
+		if (parsed
+			&& (arm_jumps.count > 0)
+			&& (arm_jumps.positions[arm_jumps.count - 1] == next_arm_pos)
+			&& (code->bytecode[next_arm_pos] == (char) if_icmpeq$))
+		{
+			code->bytecode[next_arm_pos] = (char) if_icmpne$;
+			arm_jumps.count --;
+		}
+		else if (parsed
+			&& (arm_jumps.count > 0)
+			&& (arm_jumps.positions[arm_jumps.count - 1] == next_arm_pos)
+			&& (code->bytecode[next_arm_pos] == (char) ifeq$))
+		{
+			code->bytecode[next_arm_pos] = (char) ifne$;
+			arm_jumps.count --;
+		}
+		else
+		{
+			next_arm_pos = code->bytecode_pos;
+			bytecode_append(code, goto$);
+			bytecode_append_short_int(code, 0);
+		}
+
+		case_jumps_resolve(&arm_jumps, code);
+		bytecode_append(code, pop$);
+
+		if (!parsed)
+		{
+			case_jump_here(code, next_arm_pos);
+			break;
+		}
+
+		/* an arm may be empty */
+		if ((current_token != SEMI_COLON)
+			&& (current_token != KWD_ELSE))
+		{
+			else_ends_case_arm = 1;
+			RD_statement(current_block);
+			else_ends_case_arm = outer_else_ends_case_arm;
+		}
+
+		case_jumps_add(&end_jumps, code, goto$);
+		case_jump_here(code, next_arm_pos);
+
+		if ((current_token != SEMI_COLON)
+			&& (current_token != KWD_END)
+			&& (current_token != KWD_ELSE))
+		{
+			add_error_message(200, ";", YYTEXT_STRING);
+		}
+
+		while (current_token == SEMI_COLON)
+			current_token = yylex();
+	}
+
+	/* no arm was taken */
+	bytecode_append(code, pop$);
+
+	if (current_token == KWD_ELSE)
+	{
+		current_token = yylex();
+
+		else_ends_case_arm = 0;
+		RD_block_body(current_block);
+		else_ends_case_arm = outer_else_ends_case_arm;
+	}
+
+	case_jumps_resolve(&end_jumps, code);
+
+	if (current_token != KWD_END)
+	{
+		add_error_message(203, "end", YYTEXT_STRING);
+	}
+
+	current_token = yylex();
+
+	for (i = 0; i < labels.count; i ++)
+		free(labels.items[i].text);
+
+	free(labels.items);
+	type_destroy(expression_type);
 }
 
 
@@ -3080,12 +3448,15 @@ void RD_repeat_statement(block *current_block)
 
 	int pos1;
 	int break_pos1, break_pos2;
+	int outer_else_ends_case_arm = else_ends_case_arm;
 
 	pos1 = current_block->code->bytecode_pos;
 	inside_loop ++;
+	else_ends_case_arm = 0;
 	break_pos1 = current_block->code->bytecode_pos;
 	RD_block_body(current_block);
 	break_pos2 = current_block->code->bytecode_pos;
+	else_ends_case_arm = outer_else_ends_case_arm;
 	inside_loop --;
 
 	if (current_token == KWD_FOREVER)
