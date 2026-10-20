@@ -5,8 +5,8 @@
 
 CLAUDE.local.md
 
-Release/
-Debug/
-Release-*/
+release/
+debug/
+release-*/
 
 *.o

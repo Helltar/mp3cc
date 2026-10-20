@@ -18,9 +18,9 @@ log, just a zombie. Anything an Android *application* launches has to come from 
 
 | Output directory         | ABI           | ELF `LOAD` alignment |
 |--------------------------|---------------|----------------------|
-| `Release-android-arm64`  | `arm64-v8a`   | 16 KB                |
-| `Release-android-armv7`  | `armeabi-v7a` | 4 KB                 |
-| `Release-android-x86_64` | `x86_64`      | 16 KB                |
+| `release-android-arm64`  | `arm64-v8a`   | 16 KB                |
+| `release-android-armv7`  | `armeabi-v7a` | 4 KB                 |
+| `release-android-x86_64` | `x86_64`      | 16 KB                |
 
 The r29 linker gives the two 64-bit outputs 16 KB page alignment by default; the 32-bit one stays 4 KB. The `x86_64`
 target exists so the compiler also works inside the Android Studio emulator, which cannot exec standalone ARM binaries.

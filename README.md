@@ -9,10 +9,10 @@ runtime: the classes the output calls into (`FW`, `S`, `Real` and the rest) live
 ## Building
 
 ```sh
-make            # native            -> Release/mp3CC
-make arm64      # static aarch64    -> Release-arm64/mp3CC
-make android    # static bionic     -> Release-android-{arm64,armv7,x86_64}/mp3CC
-make ISDEBUG=1  # symbols, -O0      -> Debug/mp3CC
+make            # native            -> release/mp3CC
+make arm64      # static aarch64    -> release-arm64/mp3CC
+make android    # static bionic     -> release-android-{arm64,armv7,x86_64}/mp3CC
+make ISDEBUG=1  # symbols, -O0      -> debug/mp3CC
 ```
 
 A native build needs only a C compiler and make. `make arm64` additionally needs the `aarch64-linux-gnu` cross
@@ -60,7 +60,7 @@ Both library options are required even when their directories are empty. For exa
 
 ```sh
 mkdir -p /tmp/mp3cc-out /tmp/emptylibs
-./Release/mp3CC \
+./release/mp3CC \
   -s"testdata/Selftest/src/selftest.pas" \
   -o"/tmp/mp3cc-out" \
   -l"/tmp/emptylibs" \

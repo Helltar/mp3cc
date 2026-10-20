@@ -23,10 +23,10 @@ lines are progress percentages.
 ## Build and test
 
 ```sh
-make            # native            -> Release/mp3CC
-make arm64      # static aarch64    -> Release-arm64/mp3CC
-make android    # static bionic     -> Release-android-{arm64,armv7,x86_64}/mp3CC
-make ISDEBUG=1  # symbols, -O0      -> Debug/mp3CC
+make            # native            -> release/mp3CC
+make arm64      # static aarch64    -> release-arm64/mp3CC
+make android    # static bionic     -> release-android-{arm64,armv7,x86_64}/mp3CC
+make ISDEBUG=1  # symbols, -O0      -> debug/mp3CC
 make clean
 ```
 
@@ -47,11 +47,11 @@ external library. Both `-l` and `-p` must be passed even when the directory is e
 ```sh
 mkdir -p /tmp/out /tmp/emptylibs
 for m in 1 2; do
-  ./Release/mp3CC -s"testdata/Selftest/src/selftest.pas" -o/tmp/out \
+  ./release/mp3CC -s"testdata/Selftest/src/selftest.pas" -o/tmp/out \
      -l/tmp/emptylibs -p/tmp/emptylibs -c0 -m$m || echo "FAIL selftest -m$m"
 done
 for u in ucore uplatfrm urect ugame catchrect; do
-  ./Release/mp3CC -s"testdata/CatchRect/src/$u.pas" -o/tmp/out \
+  ./release/mp3CC -s"testdata/CatchRect/src/$u.pas" -o/tmp/out \
      -l/tmp/emptylibs -p"testdata/CatchRect/libs" -c0 -m2 || echo "FAIL $u"
 done
 ```
@@ -80,7 +80,7 @@ Build both architectures and diff their output:
 make && make arm64
 mkdir -p /tmp/emptylibs
 for arch in x86 arm; do
-  [ $arch = arm ] && run="qemu-aarch64 Release-arm64/mp3CC" || run="Release/mp3CC"
+  [ $arch = arm ] && run="qemu-aarch64 release-arm64/mp3CC" || run="release/mp3CC"
   rm -rf /tmp/out-$arch && mkdir -p /tmp/out-$arch/m1 /tmp/out-$arch/m2 /tmp/out-$arch/cr
   for m in 1 2; do
     $run -s"testdata/Selftest/src/selftest.pas" -o/tmp/out-$arch/m$m \

@@ -1,9 +1,9 @@
 # mp3CC - MIDletPascal 3.5 compiler, linux/arm build
 #
-#   make                 native build            -> Release/mp3CC
-#   make arm64           static aarch64 build    -> Release-arm64/mp3CC
-#   make android         static bionic builds    -> Release-android-*/mp3CC
-#   make ISDEBUG=1       unoptimised + symbols   -> Debug/mp3CC
+#   make                 native build            -> release/mp3CC
+#   make arm64           static aarch64 build    -> release-arm64/mp3CC
+#   make android         static bionic builds    -> release-android-*/mp3CC
+#   make ISDEBUG=1       unoptimised + symbols   -> debug/mp3CC
 #
 # the arm64 target is built static on purpose: the same binary then runs both
 # on arm linux and on android (arm64-v8a), where there is no glibc to link to.
@@ -21,11 +21,11 @@ DEFS = -DLINUX -DUNIX
 
 ifeq ($(ISDEBUG),1)
 	CFLAGS += -g -O0
-	DESTDIR ?= Debug
+	DESTDIR ?= debug
 else
 	CFLAGS += -O2
 	LDFLAGS += -s
-	DESTDIR ?= Release
+	DESTDIR ?= release
 endif
 
 ifeq ($(STATIC),1)
@@ -47,7 +47,9 @@ PREVERS=file convert_md classresolver stubs classloader util \
    check_class sys_support jar_support check_code jar \
    inlinejsr main
 
-DIRS=$(DESTDIR) $(DESTDIR)/classgen $(DESTDIR)/lex $(DESTDIR)/main \
+# $(DESTDIR) itself is left out: mkdir -p makes it, and as a target of its own it
+# would be the phony release or debug target
+DIRS=$(DESTDIR)/classgen $(DESTDIR)/lex $(DESTDIR)/main \
    $(DESTDIR)/parser $(DESTDIR)/preverifier $(DESTDIR)/structures \
    $(DESTDIR)/util
 
@@ -60,13 +62,13 @@ all: release
 re: clean all
 
 clean:
-	rm -rf Release Debug Release-arm64 Release-android-*
+	rm -rf release debug release-arm64 release-android-*
 
 debug:
 	$(MAKE) ISDEBUG=1
 
 arm64:
-	$(MAKE) CROSS=aarch64-linux-gnu- STATIC=1 DESTDIR=Release-arm64
+	$(MAKE) CROSS=aarch64-linux-gnu- STATIC=1 DESTDIR=release-arm64
 
 # android builds link static against bionic via the ndk. a glibc-static binary
 # starts from adb shell but is killed by the app seccomp filter when spawned
@@ -84,15 +86,15 @@ android: android-arm64 android-armv7 android-x86_64
 
 android-arm64:
 	$(MAKE) CC=$(NDK_BIN)/aarch64-linux-android21-clang STATIC=1 ANDROID=1 \
-	   DESTDIR=Release-android-arm64 LEGACY="$(CLANG_LEGACY)"
+	   DESTDIR=release-android-arm64 LEGACY="$(CLANG_LEGACY)"
 
 android-armv7:
 	$(MAKE) CC=$(NDK_BIN)/armv7a-linux-androideabi21-clang STATIC=1 ANDROID=1 \
-	   DESTDIR=Release-android-armv7 LEGACY="$(CLANG_LEGACY)"
+	   DESTDIR=release-android-armv7 LEGACY="$(CLANG_LEGACY)"
 
 android-x86_64:
 	$(MAKE) CC=$(NDK_BIN)/x86_64-linux-android21-clang STATIC=1 ANDROID=1 \
-	   DESTDIR=Release-android-x86_64 LEGACY="$(CLANG_LEGACY)"
+	   DESTDIR=release-android-x86_64 LEGACY="$(CLANG_LEGACY)"
 
 release: $(DIRS) $(DESTDIR)/mp3CC
 
