@@ -182,6 +182,12 @@ ones:
   root cause as `get4bytes`: on 32-bit MSVC, `int` and `long` are the same size and the adjacent bytes happened to be
   zero.
 
+- **External libraries with a `long` or `double` constant could not be read.** `read_library_file` in
+  `structures/block.c` took every constant pool entry as one index, while the class file format gives a `Long` and a
+  `Double` two, and stores only the first. Every index after such a constant was off by one and the loop ran one entry
+  past the end of the pool, into the class's access flags, which read as an unknown tag: `E449 error reading external
+  library file` for any library that divides by `1000L`.
+
 `MPC.3.1.LINUX` in the upstream repository is not a working Linux port despite the name — it contains only a Makefile
 and one patched header, and does not build. That Makefile was the starting point for this one.
 

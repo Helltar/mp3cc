@@ -584,6 +584,14 @@ void read_library_file(FILE* library_file, unit* library_unit)
 		case 6: /* double */
 			constant_pool[i].param1 = read_long_int(library_file);
 			constant_pool[i].param2 = read_long_int(library_file);
+			/* a long or a double takes two pool indices but is stored once, so the
+			   next index is not in the file; leave it empty for the cleanup below */
+			if (i + 1 < constant_pool_count)
+			{
+				i++;
+				constant_pool[i].tag = 0;
+				constant_pool[i].data = NULL;
+			}
 			break;
 
 		case 1: /* Utf8 */
